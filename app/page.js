@@ -8,9 +8,10 @@ import {query, collection, getDocs, getDoc, deleteDoc, doc, setDoc} from 'fireba
 export default function Home() {
   // Creating variables to store the relevant information we need
   const [inventory, setInventory] = useState([]) //declares the inventory variable and sets its default to an empty array
-  const [open, setOpen] = useState(false) //declares the open variable(wether the inventory is open or not) sets its default to the false boolean 
+  const [itemOpen, setItemOpen] = useState(false) //declares the open variable(wether the inventory is open or not) sets its default to the false boolean 
+  const [quantOpen, setQuantOpen] = useState({'':false})
   const [itemName, setItemName] = useState('') //declares the itemName variable and sets its default to an empty string
-
+  const [itemQuantity, setItemQuantity] = useState(1) //declares the itemQuantity variable and sets its default to 1.
   //Functions 
 
   //A function that fetches the inventory from the firebase firestore database.
@@ -31,17 +32,17 @@ export default function Home() {
   }
 
   //A function that removes an item from the inventory and database
-  const removeItem = async(item) =>{
+  const removeItem = async(item, sub_quantity) =>{
     const docRef = doc(collection(firestore, 'inventory'), item) //finds the item being substracted from
     const docSnap = await getDoc(docRef) //gets a snapshot of the item
 
     if(docSnap.exists()){
-      const {quantity} = docSnap.data() //gets the quantity of the item
-      if (quantity === 1){
+      const quantity = docSnap.get('quantity') //gets the quantity of the item
+      if (quantity - sub_quantity < 1){
         await deleteDoc(docRef) //deletes the document
       }
       else{
-        await setDoc(docRef, {quantity: quantity - 1}) //substracts 1 from the quantity of the item
+        await setDoc(docRef, {quantity: quantity - sub_quantity}) //substracts 1 from the quantity of the item
       }
     }
     //Could potentially make an error message if it doesn't exist
@@ -50,16 +51,16 @@ export default function Home() {
   }
 
   //A function that adds an item from the inventory and database
-  const addItem = async(item) =>{
+  const addItem = async(item, add_quantity) =>{
     const docRef = doc(collection(firestore, 'inventory'), item) //finds the item being added to
     const docSnap = await getDoc(docRef) //gets a snapshot of the item
 
     if(docSnap.exists()){
-      const {quantity} = docSnap.data() //gets the quantity of the item
-      await setDoc(docRef, {quantity: quantity + 1}) //adds 1 to the quantity of the item
+      const quantity = docSnap.get('quantity') //gets the quantity of the item
+      await setDoc(docRef, {quantity: Number(quantity) + add_quantity}) //adds the specified quantity to the quantity of the item
       }
     else{
-      await setDoc(docRef, {quantity: 1}) 
+      await setDoc(docRef, {quantity: add_quantity}) 
     }
     await updateInventory()
   }
@@ -72,20 +73,31 @@ export default function Home() {
   )
   
   //Modal Functions
-  const handleOpen = () => setOpen(true)
-  const handleClose = () => setOpen(false)
+  const handleOpen = () => setItemOpen(true)
+  const handleClose = () => setItemOpen(false)
+  const handleQuantOpen = (item, op) => setQuantOpen({name:item, operation:op, open:true})
+  const handleQuantClose = (item, op) => setQuantOpen({name:item, operation:op, open:false})
 
   return (
     <Box 
-    width='100vw' //to cover the full width
-    height='100vh' //to cover the full height
-    display='flex' //not sure
+    width='100vw'
+    height='100vh'
+    display='flex'
     flexDirection='column'
-    justifyContent='center' //centers horizontally
-    alignItems='center' //centers vertically
-    gap={2} //probably the gap from the edges?
-    >
-      <Modal open={open} onClose={handleClose}>
+    justifyContent='center'
+    alignItems='center'
+    gap={2}
+    > 
+      <Button variant = 'contained' onClick={()=>{
+        handleOpen()
+        }}
+      >
+        Add New Item
+      </Button>
+
+      <Modal open={itemOpen} onClose={handleClose} 
+      //The Pop Up when 'Add New Item' button above is pressed
+      >
         <Box 
         position='absolute' //centers the box
         top='50%'
@@ -103,6 +115,7 @@ export default function Home() {
         }}
         >
           <Typography variant='h6'>Add Item</Typography>
+
           <Stack width='100%' direction='row' spacing={2}>
             <TextField 
             variant='outlined'
@@ -113,24 +126,80 @@ export default function Home() {
               )
             }}
             />
+
+            <TextField 
+            variant='outlined'
+            fullWidth 
+            value={itemQuantity}
+            onChange={(e) => {
+              setItemQuantity(e.target.value)
+            }}
+            />
+
             <Button variant='outlined' onClick={()=>{
-              addItem(itemName)
+              addItem(itemName, Number(itemQuantity))
+
               setItemName('')
+              setItemQuantity(1)
               handleClose()
             }}
-            >Add</Button>
+            >
+              Add
+            </Button>
           </Stack>
-
         </Box>
       </Modal>
-      <Button variant = 'contained' onClick={()=>{
-        handleOpen()
-        }}
+      
+      <Modal open={quantOpen.open} onClose={handleQuantClose} 
+      //The pop up when either add or remove is pressed for any particular item
       >
-        Add New Item
-      </Button>
+        <Box 
+        position='absolute' //centers the box
+        top='50%'
+        left='50%'
+        width={400}
+        bgcolor='white'
+        border='2px solid #0000'
+        boxShadow={24}
+        p={4}
+        display='flex'
+        flexDirection='column'
+        gap={3}
+        sx={{
+          transform: 'translate(-50%,-50%)',
+        }}
+        >
+          <Typography variant='h6'>{quantOpen.operation} Quantity of '{quantOpen.name}' </Typography>
+          
+          <Stack width='100%' direction='row' spacing={2}>
+            <TextField 
+            variant='outlined'
+            fullWidth 
+            value={itemQuantity}
+            onChange={(e) => {
+              setItemQuantity(e.target.value)
+            }}
+            />
+            
+            <Button variant='outlined' onClick={()=>{
+              if (quantOpen.operation == 'Add'){
+                addItem(quantOpen.name, Number(itemQuantity))
+              }
+              else{
+                removeItem(quantOpen.name, Number(itemQuantity))
+              }
+              setItemQuantity(1)
+              handleQuantClose('')
+            }}
+            >
+              {quantOpen.operation}
+            </Button>
+          </Stack>
+        </Box>
+      </Modal>
+
       <Box border='1px solid #333'>
-          <Box width= '800px' height= '100px' bgcolor='#ADD8E6' display='flex' alignItems='center' justifyContent='center'>
+          <Box width= '800px' height= '100px' bgcolor='#add8e6' display='flex' alignItems='center' justifyContent='center'>
             <Typography variant= 'h2' color= '#333'>
               Inventory Items
             </Typography>
@@ -152,21 +221,31 @@ export default function Home() {
                 <Typography variant='h3' color='#333' textAlign='center'>
                   {name}
                 </Typography>
+
                 <Typography variant='h3' color='#333' textAlign='center'>
                   {quantity}
                 </Typography>
+                
                 <Stack direction='row' spacing={2}>
                   <Button variant='contained' onClick={()=>{
-                    addItem(name)
+                    handleQuantOpen(name, 'Add')
                     }}
                   > 
                     Add
                   </Button>
+
                   <Button variant='contained' onClick={()=>{
-                    removeItem(name)
+                    handleQuantOpen(name, 'Remove')
                     }}
                   > 
                     Remove
+                  </Button>
+
+                  <Button variant='contained' onClick={()=>{
+                   removeItem(name,quantity)
+                    }}
+                  > 
+                    Clear
                   </Button>
                 </Stack>
               </Box>
